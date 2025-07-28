@@ -1,0 +1,4 @@
+name = "fbmc"
+uuid = "8f33c84f-01e3-41d1-a985-ecc84d01b7c2"
+authors = ["Edwin Bedolla <developeredwin@gmail.com>"]
+version = "0.1.0"
