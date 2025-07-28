@@ -1,0 +1,10 @@
+# Ignore macOS stuff
+.DS_Store
+
+# Ignore files and tests
+*.xyz
+*.png
+*.txt
+
+# Ignore editor stuff
+.vscode/
