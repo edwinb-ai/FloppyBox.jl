@@ -377,7 +377,7 @@ function main()
 
     # Pressure ramp parameters
     initial_pressure = 0.1
-    final_pressure = 10_000.0
+    final_pressure = 100_000.0
 
     # Simulation parameters
     equilibration_cycles = 100_000     # Equilibration at initial pressure
@@ -405,7 +405,7 @@ function main()
     # Minimum bounds to prevent freeze
     min_displacement = 0.1
     min_ln_vol_change = 1e-4
-    min_deformation = 0.1
+    min_deformation = 0.15
 
     params = fbmc.EnhancedAdaptiveParameters(
         initial_max_displacement,
