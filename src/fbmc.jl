@@ -16,73 +16,60 @@ include("deform.jl")
 Unchanged from your version; creates a dilute, overlap‑free start.
 """
 function initialize_cubic_particles(
-    n_particles::Int, frac_B::T, size_ratio::T, sigma_A::T, packing_fraction::T
+    n_particles::Int,
+    frac_B::T,
+    size_ratio::T,
+    sigma_A::T,
+    sigma_B::T,
+    packing_fraction::T
 ) where {T<:AbstractFloat}
-    box_length = calculate_box_size(
-        n_particles, packing_fraction, frac_B, sigma_A, size_ratio
-    )
-    box = Box(box_length)
 
-    n_per_dim = ceil(Int, n_particles^(1 / 3))
-    spacing = box_length / n_per_dim
-    total_lattice_size = (n_per_dim - 1) * spacing
-    offset = (box_length - total_lattice_size) / 2.0
-
+    # Composition & types
     n_B = round(Int, n_particles * frac_B)
     n_A = n_particles - n_B
-    particle_types = vcat(fill(1, n_A), fill(2, n_B))
-    Random.shuffle!(particle_types)
-    sigma_B = sigma_A * size_ratio
+    types = vcat(fill(1, n_A), fill(2, n_B))
+    # random assignment on lattice
+    Random.shuffle!(types)
 
-    particles = Particle{T,Int}[]
-    count = 0
-    max_attempts = 1000
+    # Grid size
+    n_per_dim = ceil(Int, n_particles^(1 / 3))
 
+    # Box from packing fraction
+    Lφ = calculate_box_size(n_particles, packing_fraction, frac_B, sigma_A, size_ratio)
+
+    # Spacing ≥ σA
+    sφ = Lφ / n_per_dim
+    s_req = sigma_A
+    spacing = max(sφ, s_req)
+    L = spacing * n_per_dim
+    box = Box(L)
+
+    # Offset to center simple‑cubic lattice
+    offset = spacing / 2.0
+
+    # Place particles deterministically
+    particles = Vector{Particle{T,Int}}()
+    idx = 1
     for i in 0:(n_per_dim - 1), j in 0:(n_per_dim - 1), k in 0:(n_per_dim - 1)
-        if count >= n_particles
+        if idx > n_particles
             break
         end
-        count += 1
-        particle_type = particle_types[count]
-        sigma = particle_type == 1 ? sigma_A : sigma_B
+        typ = types[idx]
+        sigma = typ == 1 ? sigma_A : sigma_B
 
-        placed = false
-        for attempt in 1:max_attempts
-            noise_amplitude = min(0.05, spacing * 0.1)
-            x = offset + (i * spacing) + (2.0 * rand() - 1.0) * noise_amplitude
-            y = offset + (j * spacing) + (2.0 * rand() - 1.0) * noise_amplitude
-            z = offset + (k * spacing) + (2.0 * rand() - 1.0) * noise_amplitude
-            newp = Particle{T,Int}(x, y, z, particle_type, sigma)
+        x = offset + i * spacing
+        y = offset + j * spacing
+        z = offset + k * spacing
 
-            overlap = false
-            for p in particles
-                _, dist = minimum_image_distance(newp, p, box)
-                min_d = (newp.sigma + p.sigma) / 2.0
-                if dist < min_d - 1e-12
-                    overlap = true
-                    break
-                end
-            end
-            if !overlap
-                push!(particles, newp)
-                placed = true
-                break
-            end
-        end
-        if !placed
-            @error "Failed to place particle $count without overlaps after $max_attempts attempts"
-            @error "Box length: $box_length, spacing: $spacing, diameter: $sigma"
-            break
-        end
+        push!(particles, Particle{T,Int}(x, y, z, typ, sigma))
+        idx += 1
     end
 
-    # Final overlap check (box MIC only)
-    for i in 1:(length(particles) - 1), j in (i + 1):length(particles)
-        _, d = minimum_image_distance(particles[i], particles[j], box)
-        req = (particles[i].sigma + particles[j].sigma) / 2
-        if d < req - 1e-12
-            @error "INITIAL OVERLAP between $i and $j (d=$d < $req)"
-        end
+    # Sanity check (should never fire)
+    for a in 1:(length(particles) - 1), b in (a + 1):length(particles)
+        _, d = minimum_image_distance(particles[a], particles[b], box)
+        req = (particles[a].sigma + particles[b].sigma) / 2
+        @assert d ≥ req - 1e-12 "Overlap: d=$d < req=$req"
     end
 
     return particles, box
@@ -321,23 +308,88 @@ end # module fbmc
 
 using .fbmc
 using LinearAlgebra
+using ArgParse
+
+function parse_commandline()
+    s = ArgParse.ArgParseSettings()
+
+    ArgParse.@add_arg_table s begin
+        "--num-particles", "-n"
+        help = "Total number of particles"
+        arg_type = Int
+        default = 1
+        "--size-ratio", "-q"
+        help = "Size ratio defined as sigma_B / sigma_A, where sigma_B < sigma_A."
+        arg_type = Float64
+        default = 1.0
+        "--composition", "-x"
+        help = "The composition or stoichiometry defined as x = N_B / N, where N_B is the type B of particle with diameter sigma_B. In this case, N is the total number of particles. If 0.0 (the default) the simulation will do a monodisperse hard-sphere simulation."
+        arg_type = Float64
+        default = 0.0
+        "--sigma-A", "-s"
+        help = "The diameter of type A. Along with the size ratio this will define the diameter of type B particles, only if the composition is larger than zero. By default this is always one, and considered the unit of length in the simulation."
+        arg_type = Float64
+        default = 1.0
+        "--initial-packing-fraction", "-e"
+        help = "The packing fraction of the system, ranging from 0 to 1. The code already computes the correct packing fraction for mixtures. This will be used to initialize the system."
+        arg_type = Float64
+        default = 0.05
+        "--initial-pressure"
+        help = "The value of the initial pressure. Must be something reasonable related to the initial packing fraction, otherwise the simulation will get stuck."
+        arg_type = Float64
+        default = 0.1
+        "--final-pressure"
+        help = "The value of the final pressure. This is the target pressure to obtain and this will determine when the simulation will stop."
+        arg_type = Float64
+        default = 10_000.0
+        "--init-equilibration-cycles"
+        help = "The number of Monte Carlo cycles to equilibrate the initial configuration. This is to remove all correlations with the initial placement of the particles."
+        arg_type = Int
+        default = 100_000
+        "--equilibration-cycles"
+        help = "The number of Monte Carlo cycles to reach the final pressure."
+        arg_type = Int
+        default = 1_000_000
+        "--final-equilibration-cycles"
+        help = "The number of Monte Carlo cycles to equilibrate the configuration at the end of the simulation."
+        arg_type = Int
+        default = 100_000
+        "--move-acceptance", "-d"
+        help = "The acceptance rate of translational moves. It is important to note that due to how the simulation prints the values taking into account the global accumulants, the resulting acceptance rate might be higher."
+        arg_type = Float64
+        default = 0.2
+        "--volume-acceptance", "-v"
+        help = "The acceptance rate of volume (scaling) moves. It is important to note that due to how the simulation prints the values taking into account the global accumulants, the resulting acceptance rate might be higher."
+        arg_type = Float64
+        default = 0.15
+        "--deform-acceptance", "-f"
+        help = "The acceptance rate of deformation (shearing) moves. It is important to note that due to how the simulation prints the values taking into account the global accumulants, the resulting acceptance rate might be higher."
+        arg_type = Float64
+        default = 0.15
+    end
+
+    return ArgParse.parse_args(s)
+end
 
 function main()
+    # Parse the necessary arguments from the CLI
+    parsed_args = parse_commandline()
     # Physical parameters (keeping as requested)
-    num_particles = 4
-    size_ratio = 1.0
-    frac_B = 0.0
-    sigma_A = 1.0
-    packing_fraction = 0.05
+    num_particles = parsed_args["num-particles"]
+    size_ratio = parsed_args["size-ratio"]
+    frac_B = parsed_args["composition"]
+    sigma_A = parsed_args["sigma-A"]
+    sigma_B = frac_B * sigma_A
+    packing_fraction = parsed_args["sigma-A"]
 
     # Pressure ramp parameters
-    initial_pressure = 0.1
-    final_pressure = 100_000.0
+    initial_pressure = parsed_args["initial-pressure"]
+    final_pressure = parsed_args["final-pressure"]
 
     # Simulation parameters
-    equilibration_cycles = 100_000     # Equilibration at initial pressure
-    ramp_cycles = 10_000_000             # Cycles for pressure ramp
-    final_cycles = 100_000             # Additional cycles at final pressure
+    equilibration_cycles = parsed_args["init-equilibration-cycles"]
+    ramp_cycles = parsed_args["equilibration-cycles"]
+    final_cycles = parsed_args["final-equilibration-cycles"]
 
     # Move frequency chooses randomly which move will be sampled
     volume_move_freq = 0.15
@@ -353,9 +405,9 @@ function main()
     initial_max_deformation = 1.0
     adaptation_interval = 100  # Adapt every 50 cycles for stability
     printing_interval = 10000   # Print progress every 1000 cycles
-    target_translation = 0.2
-    target_volume = 0.15
-    target_deformation = 0.15
+    target_translation = parsed_args["move-acceptance"]
+    target_volume = parsed_args["volume-acceptance"]
+    target_deformation = parsed_args["deform-acceptance"]
 
     # Minimum bounds to prevent freeze
     min_displacement = 1e-4
@@ -379,7 +431,7 @@ function main()
 
     # Initialize the configuration
     particles, box = fbmc.initialize_cubic_particles(
-        num_particles, frac_B, size_ratio, sigma_A, packing_fraction
+        num_particles, frac_B, size_ratio, sigma_A, sigma_B, packing_fraction
     )
 
     # Initialize image list for overlap checking
@@ -691,7 +743,9 @@ function main()
 
     # Attempt a final lattice reduction
     println("Attempting a final lattice reduction...")
-    (reduced, distortion) = fbmc.lattice_reduce!(box, particles, images; threshold=1.05, max_iter=100)
+    (reduced, distortion) = fbmc.lattice_reduce!(
+        box, particles, images; threshold=1.05, max_iter=100
+    )
 
     if reduced
         println("Lattice reduced! Final distortion: $distortion")
