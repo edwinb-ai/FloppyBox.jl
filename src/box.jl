@@ -123,3 +123,47 @@ function compute_box_heights(box::Box{T}) where {T}
     h3 = volume / area_12
     return (h1, h2, h3)
 end
+
+"""
+    check_configuration_validity(particles, box, images::fbmc.ImageLists)
+
+Report detailed overlaps. Uses `images.pair` and checks both orderings.
+"""
+function check_configuration_validity(particles, box, images::ImageLists)
+    println("=== CONFIGURATION VALIDITY CHECK ===")
+
+    heights = compute_box_heights(box)
+    max_sigma = maximum(p.sigma for p in particles)
+    println("Box heights: $(round.(heights, digits=3))")
+    println("Max particle diameter: $(round(max_sigma, digits=3))")
+    println("Height/diameter ratios: $(round.(heights ./ max_sigma, digits=3))")
+    println("Self images: $(length(images.self))  Pair images: $(length(images.pair))")
+
+    overlaps_found = 0
+    n = length(particles)
+    for i in 1:(n - 1), j in (i + 1):n
+        pi = particles[i]
+        pj = particles[j]
+        _, d_ij = minimum_image_distance(pi, pj, box, images.pair)
+        _, d_ji = minimum_image_distance(pj, pi, box, images.pair)
+        d = min(d_ij, d_ji)
+        req = (pi.sigma + pj.sigma) / 2
+        if d < req - 1e-12
+            overlaps_found += 1
+            println("OVERLAP $overlaps_found: Particles $i-$j")
+            println("  Distance: $(round(d, digits=6))   Required: $(round(req, digits=6))")
+            println("  Overlap:  $(round(req - d, digits=6))")
+            println(
+                "  Positions: [$(round(pi.x,digits=3)), $(round(pi.y,digits=3)), $(round(pi.z,digits=3))]  |  [$(round(pj.x,digits=3)), $(round(pj.y,digits=3)), $(round(pj.z,digits=3))]",
+            )
+        end
+    end
+
+    if overlaps_found > 0
+        @warn "Configuration overlapping!!"
+        return false
+    else
+        println("Configuration valid - no overlaps found")
+        return true
+    end
+end

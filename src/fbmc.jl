@@ -322,50 +322,6 @@ end # module fbmc
 using .fbmc
 using LinearAlgebra
 
-"""
-    check_configuration_validity(particles, box, images::fbmc.ImageLists)
-
-Report detailed overlaps. Uses `images.pair` and checks both orderings.
-"""
-function check_configuration_validity(particles, box, images::fbmc.ImageLists)
-    println("=== CONFIGURATION VALIDITY CHECK ===")
-
-    heights = fbmc.compute_box_heights(box)
-    max_sigma = maximum(p.sigma for p in particles)
-    println("Box heights: $(round.(heights, digits=3))")
-    println("Max particle diameter: $(round(max_sigma, digits=3))")
-    println("Height/diameter ratios: $(round.(heights ./ max_sigma, digits=3))")
-    println("Self images: $(length(images.self))  Pair images: $(length(images.pair))")
-
-    overlaps_found = 0
-    n = length(particles)
-    for i in 1:(n - 1), j in (i + 1):n
-        pi = particles[i]
-        pj = particles[j]
-        _, d_ij = fbmc.minimum_image_distance(pi, pj, box, images.pair)
-        _, d_ji = fbmc.minimum_image_distance(pj, pi, box, images.pair)
-        d = min(d_ij, d_ji)
-        req = (pi.sigma + pj.sigma) / 2
-        if d < req - 1e-12
-            overlaps_found += 1
-            println("OVERLAP $overlaps_found: Particles $i-$j")
-            println("  Distance: $(round(d, digits=6))   Required: $(round(req, digits=6))")
-            println("  Overlap:  $(round(req - d, digits=6))")
-            println(
-                "  Positions: [$(round(pi.x,digits=3)), $(round(pi.y,digits=3)), $(round(pi.z,digits=3))]  |  [$(round(pj.x,digits=3)), $(round(pj.y,digits=3)), $(round(pj.z,digits=3))]",
-            )
-        end
-    end
-
-    if overlaps_found > 0
-        @warn "Configuration overlapping!!"
-        return false
-    else
-        println("Configuration valid - no overlaps found")
-        return true
-    end
-end
-
 function main()
     # Physical parameters (keeping as requested)
     num_particles = 4
@@ -683,22 +639,7 @@ function main()
             else
                 0.0
             end
-
-            # println(
-            #     "Final Cycle $cycle: P = $(round(current_pressure, digits=3)), V = $(round(current_volume, digits=3)), η = $(round(current_packing, digits=8)), " *
-            #     "T_acc = $(round(trans_acc, digits=3)), V_acc = $(round(vol_acc, digits=3)), " *
-            #     "D_acc = $(round(deform_acc, digits=3)), Distort = $(round(distortion.distortion_metric, digits=3)), " *
-            #     "Reductions = $total_reductions, Images = $(length(images))"
-            # )
         end
-
-        # CRITICAL: Check for overlaps every so often
-        # if cycle % (printing_interval * 2) == 0
-        #     if !check_configuration_validity(particles, box, images)
-        #         @error "Overlaps detected at final cycle $cycle - stopping simulation"
-        #         return
-        #     end
-        # end
     end
 
     # Final statistics and output
@@ -795,7 +736,7 @@ function main()
 
     # Write final configuration
     images = fbmc.compute_image_lists(box, particles)
-    check_configuration_validity(particles, box, images)
+    fbmc.check_configuration_validity(particles, box, images)
     fbmc.write_xyz(particles, box, "final.xyz", images)
 
     println("\nFinal configuration written to final.xyz")
