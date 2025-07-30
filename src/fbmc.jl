@@ -142,7 +142,6 @@ function mc_cycle!(
     params::EnhancedAdaptiveParameters;
     move_frequencies=(0.1, 0.1),
     images=ImageLists(NTuple{3,Int}[], NTuple{3,Int}[], (0, 0, 0)),
-    cutoff_buffer=[1.0],
     auto_reduce=true,
     reduction_threshold=2.0,
     sigma_A=1.0,
@@ -181,7 +180,7 @@ function mc_cycle!(
         total_volumes += 1
         params.vol_accepted += result
         params.vol_attempts += 1
-    elseif move_type < volume_freq + deform_freq
+    elseif move_type < deform_freq + volume_freq
         result, reduced = deformation_move!(
             particles,
             box,
@@ -385,17 +384,17 @@ function main()
     final_cycles = 100_000             # Additional cycles at final pressure
 
     # Move frequency chooses randomly which move will be sampled
-    volume_move_freq = 0.2
-    deform_move_freq = 0.2
+    volume_move_freq = 0.15
+    deform_move_freq = 0.15
 
     # Lattice reduction parameters
     auto_reduce = true
     reduction_threshold = 1.5  # Trigger reduction when distortion > 1.5
 
     # Enhanced adaptive parameters with bounds
-    initial_max_displacement = 5.0
-    initial_max_ln_vol_change = 5.0
-    initial_max_deformation = 0.01
+    initial_max_displacement = 1.0
+    initial_max_ln_vol_change = 1.0
+    initial_max_deformation = 1.0
     adaptation_interval = 100  # Adapt every 50 cycles for stability
     printing_interval = 10000   # Print progress every 1000 cycles
     target_translation = 0.2
@@ -403,9 +402,10 @@ function main()
     target_deformation = 0.15
 
     # Minimum bounds to prevent freeze
-    min_displacement = 0.1
+    min_displacement = 1e-4
     min_ln_vol_change = 1e-4
-    min_deformation = 0.15
+    min_deformation = 1e-4
+    adaptation_factor = 1.05
 
     params = fbmc.EnhancedAdaptiveParameters(
         initial_max_displacement,
@@ -415,7 +415,7 @@ function main()
         target_volume,
         target_deformation,
         adaptation_interval,
-        1.05,  # Moderate adaptation factor
+        adaptation_factor,
         min_displacement,
         min_ln_vol_change,
         min_deformation,
@@ -427,10 +427,7 @@ function main()
     )
 
     # Initialize image list for overlap checking
-    max_sigma = maximum(p.sigma for p in particles)
-    initial_cutoff = max_sigma + 1.0
     images = fbmc.compute_image_lists(box, particles)
-    cutoff_buffer = [1.0]
 
     println("Initialized $(length(particles)) particles")
     println("Pressure ramp: $initial_pressure → $final_pressure")
@@ -486,7 +483,6 @@ function main()
             params;
             move_frequencies=(volume_move_freq, deform_move_freq),
             images=images,
-            cutoff_buffer=cutoff_buffer,
             auto_reduce=auto_reduce,
             reduction_threshold=reduction_threshold,
         )
@@ -502,7 +498,7 @@ function main()
 
         # Adapt parameters (with bounds checking)
         if cycle % adaptation_interval == 0
-            fbmc.adapt_enhanced_parameters!(params)
+            fbmc.adapt_enhanced_parameters!(params, box)
         end
 
         # Print progress
@@ -540,6 +536,15 @@ function main()
         end
     end
 
+    # Reset counters
+    total_accepted_translations = 0
+    total_translation_attempts = 0
+    total_accepted_volumes = 0
+    total_volume_attempts = 0
+    total_accepted_deformations = 0
+    total_deformation_attempts = 0
+    total_reductions = 0
+
     # PHASE 2: PRESSURE RAMP
     println("\n=== PHASE 2: PRESSURE RAMP ===")
     println(
@@ -558,7 +563,6 @@ function main()
             params;
             move_frequencies=(volume_move_freq, deform_move_freq),
             images=images,
-            cutoff_buffer=cutoff_buffer,
             auto_reduce=auto_reduce,
             reduction_threshold=reduction_threshold,
         )
@@ -574,7 +578,7 @@ function main()
 
         # Adapt parameters (with bounds checking)
         if cycle % adaptation_interval == 0
-            fbmc.adapt_enhanced_parameters!(params)
+            fbmc.adapt_enhanced_parameters!(params, box)
         end
 
         # Print progress
@@ -637,6 +641,15 @@ function main()
         # end
     end
 
+    # Reset counters
+    total_accepted_translations = 0
+    total_translation_attempts = 0
+    total_accepted_volumes = 0
+    total_volume_attempts = 0
+    total_accepted_deformations = 0
+    total_deformation_attempts = 0
+    total_reductions = 0
+
     # PHASE 3: FINAL EQUILIBRATION
     current_pressure = final_pressure
     println("\n=== PHASE 3: FINAL EQUILIBRATION ===")
@@ -651,7 +664,6 @@ function main()
             params;
             move_frequencies=(volume_move_freq, deform_move_freq),
             images=images,
-            cutoff_buffer=cutoff_buffer,
             auto_reduce=auto_reduce,
             reduction_threshold=reduction_threshold,
         )
@@ -667,7 +679,7 @@ function main()
 
         # Adapt parameters (with bounds checking)
         if cycle % adaptation_interval == 0
-            fbmc.adapt_enhanced_parameters!(params)
+            fbmc.adapt_enhanced_parameters!(params, box)
         end
 
         # Print progress
@@ -750,6 +762,28 @@ function main()
     final_orthogonality = fbmc.compute_box_orthogonality(box)
 
     println("\nFinal Box Analysis:")
+    println("Box matrix:")
+    for i in 1:3
+        println(
+            "  $(round(box.h[i,1], digits=4))  $(round(box.h[i,2], digits=4))  $(round(box.h[i,3], digits=4))",
+        )
+    end
+    println(
+        "Angle deviations from 90°: $(round(final_orthogonality.angle_deviation, digits=2))°",
+    )
+    println("Aspect ratio: $(round(final_orthogonality.aspect_ratio, digits=3))")
+
+    # Attempt a final lattice reduction
+    println("Attempting a final lattice reduction...")
+    (reduced, distortion) = fbmc.lattice_reduce!(box, particles, images; threshold=1.05, max_iter=100)
+
+    if reduced
+        println("Lattice reduced! Final distortion: $distortion")
+    else
+        println("Lattice could not be reduced.")
+    end
+
+    println("\nBox Analysis after lattice reduction attempt:")
     println("Box matrix:")
     for i in 1:3
         println(
