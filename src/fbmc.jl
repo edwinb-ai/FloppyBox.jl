@@ -613,32 +613,7 @@ function main()
                 "T_acc = $(round(trans_acc, digits=3)), V_acc = $(round(vol_acc, digits=3)), " *
                 "D_acc = $(round(deform_acc, digits=3)), ",
             )
-
-            # Write a configuration for debugging
-            # fbmc.write_xyz(particles, box, "config_step=$(cycle).xyz", images)
-
-            # println(
-            #     "  Box heights: $(round(heights[1], digits=3)), $(round(heights[2], digits=3)), $(round(heights[3], digits=3)) " *
-            #     "(max particle σ = $(round(max_particle_diameter, digits=3)))"
-            # )
-
-            # Show current adaptive parameters with bounds check
-            # println(
-            #     "  Current params: max_disp = $(round(params.max_displacement, digits=4)) (min: $(params.min_displacement)), " *
-            #     "max_ln_vol = $(round(params.max_ln_vol_change, digits=4)) (min: $(params.min_ln_vol_change)), " *
-            #     "max_deform = $(round(params.max_deformation, digits=4)) (min: $(params.min_deformation))"
-            # )
-
         end
-
-        # CRITICAL: Check for overlaps every so often
-        # if cycle % (printing_interval * 2) == 0
-        #     # fbmc.update_image_lists!(images, box, particles)
-        #     if !check_configuration_validity(particles, box, images)
-        #         @error "Overlaps detected at ramp cycle $cycle - stopping simulation"
-        #         return nothing
-        #     end
-        # end
     end
 
     # Reset counters

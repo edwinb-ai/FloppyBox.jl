@@ -100,18 +100,15 @@ function adapt_enhanced_parameters!(params::EnhancedAdaptiveParameters, box)
             params.max_displacement = min(
                 params.max_displacement * params.adaptation_factor, 0.5 * minimum(compute_box_heights(box))
             )
-            # params.max_displacement = params.max_displacement * params.adaptation_factor
         elseif current_trans_acc < params.target_trans_acceptance - tolerance
             params.max_displacement = max(
                 params.max_displacement / params.adaptation_factor, params.min_displacement
             )
-            # params.max_displacement = params.max_displacement / params.adaptation_factor
         end
     end
 
     # Adapt volume moves
     if params.vol_attempts > 0
-        # max_ln_vol_change_limit = 1.0
         p_acc = params.vol_accepted / params.vol_attempts
         p_target = params.target_vol_acceptance
 
@@ -121,9 +118,6 @@ function adapt_enhanced_parameters!(params::EnhancedAdaptiveParameters, box)
             params.max_ln_vol_change /= params.adaptation_factor
         end
 
-        # params.max_ln_vol_change = clamp(
-        #     params.max_ln_vol_change, params.min_ln_vol_change, max_ln_vol_change_limit
-        # )
         params.max_ln_vol_change = max(params.max_ln_vol_change, params.min_ln_vol_change)
     end
 
@@ -131,15 +125,11 @@ function adapt_enhanced_parameters!(params::EnhancedAdaptiveParameters, box)
     if params.deform_attempts > 0
         current_deform_acc = params.deform_accepted / params.deform_attempts
         if current_deform_acc > params.target_deform_acceptance + tolerance
-            # params.max_deformation = min(
-            #     params.max_deformation * params.adaptation_factor, 0.5
-            # )
             params.max_deformation = params.max_deformation * params.adaptation_factor
         elseif current_deform_acc < params.target_deform_acceptance - tolerance
             params.max_deformation = max(
                 params.max_deformation / params.adaptation_factor, params.min_deformation
             )
-            # params.max_deformation = params.max_deformation / params.adaptation_factor
         end
     end
 

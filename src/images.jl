@@ -68,35 +68,8 @@ end
 
 Extend the reduced self list by adding ONE additional layer in the POSITIVE
 vi directions: i=N1+1 and/or j=N2+1 and/or k=N3+1, and **include (0,0,0)** so
-in‑cell pairs are tested. We reuse the same half‑space filter.
+in-cell pairs are tested. We reuse the same half-space filter.
 """
-# function compute_pair_image_list(
-#     box::Box{T}, N::NTuple{3,Int}, self_list::Vector{NTuple{3,Int}}
-# ) where {T<:AbstractFloat}
-#     v1 = @views box.h[:, 1]
-#     v2 = @views box.h[:, 2]
-#     v3 = @views box.h[:, 3]
-#     n_hat = v1 + v2 + v3
-#     N1, N2, N3 = N
-
-#     pairset = Set{NTuple{3,Int}}(self_list)
-#     # include origin to catch central cell pairs
-#     push!(pairset, (0, 0, 0))
-
-#     for i in (-N1):(N1 + 1), j in (-N2):(N2 + 1), k in (-N3):(N3 + 1)
-#         # Only add the positive "shell"
-#         if (i == N1 + 1) || (j == N2 + 1) || (k == N3 + 1)
-#             t = i * v1 + j * v2 + k * v3
-#             if dot(t, n_hat) >= 0
-#                 push!(pairset, (i, j, k))
-#             end
-#         end
-#     end
-#     lst = collect(pairset)
-#     sort!(lst; by=s -> (abs(s[1]) + abs(s[2]) + abs(s[3]), s[1]^2 + s[2]^2 + s[3]^2))
-#     return lst
-# end
-
 function compute_pair_image_list(
     box::Box{T}, N::NTuple{3,Int}, self_list::Vector{NTuple{3,Int}}
 ) where {T<:AbstractFloat}

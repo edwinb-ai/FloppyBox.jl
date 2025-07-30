@@ -1,5 +1,3 @@
-# Deformation moves with box‑validity checks and optional lattice reduction.
-
 """
     check_box_validity(M::Matrix{T}, particles) -> Bool
 

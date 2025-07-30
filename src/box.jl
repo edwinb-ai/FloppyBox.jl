@@ -34,14 +34,6 @@ Algorithm:
 3. apply MIC in fractional space: s_c = s - round.(s)
 4. back to Cartesian: dr_c = h * s_c
 """
-# function minimum_image_distance(r1::Vector{T}, r2::Vector{T}, box::Box{T}) where {T}
-#     dr = r2 .- r1
-#     s = box.h_inv * dr
-#     sC = @. s - round(s)
-#     drC = box.h * sC
-#     return drC, norm(drC)
-# end
-
 function minimum_image_distance(r1::Vector{T}, r2::Vector{T}, box::Box{T}) where {T}
     s = box.h_inv * (r2 .- r1)            # fractional displacement
     s0 = round.(s)                        # nearest integer vector in Z^3
