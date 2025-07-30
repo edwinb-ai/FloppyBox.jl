@@ -8,3 +8,6 @@
 
 # Ignore editor stuff
 .vscode/
+
+# Ignore Julia files
+Manifest.toml
