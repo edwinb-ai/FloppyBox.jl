@@ -89,7 +89,7 @@ function calculate_box_size(
     n_B = n_particles - n_A
     total_particle_volume = n_A * vol_A + n_B * vol_B
     box_volume = total_particle_volume / packing_fraction
-    return T(box_volume^(1 / 3))
+    return T(cbrt(box_volume))
 end
 
 """

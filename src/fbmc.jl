@@ -68,7 +68,7 @@ function initialize_cubic_particles(
     # Sanity check (should never fire)
     for a in 1:(length(particles) - 1), b in (a + 1):length(particles)
         _, d = minimum_image_distance(particles[a], particles[b], box)
-        req = (particles[a].sigma + particles[b].sigma) / 2
+        req = (particles[a].sigma + particles[b].sigma) / 2.0
         @assert d ≥ req - 1e-12 "Overlap: d=$d < req=$req"
     end
 
@@ -379,7 +379,7 @@ function main()
     size_ratio = parsed_args["size-ratio"]
     frac_B = parsed_args["composition"]
     sigma_A = parsed_args["sigma-A"]
-    sigma_B = frac_B * sigma_A
+    sigma_B = size_ratio * sigma_A
     packing_fraction = parsed_args["sigma-A"]
 
     # Pressure ramp parameters
@@ -493,6 +493,7 @@ function main()
             images=images,
             auto_reduce=auto_reduce,
             reduction_threshold=reduction_threshold,
+            size_ratio=size_ratio,
         )
 
         # Accumulate statistics
@@ -573,6 +574,7 @@ function main()
             images=images,
             auto_reduce=auto_reduce,
             reduction_threshold=reduction_threshold,
+            size_ratio=size_ratio,
         )
 
         # Accumulate statistics
@@ -649,6 +651,7 @@ function main()
             images=images,
             auto_reduce=auto_reduce,
             reduction_threshold=reduction_threshold,
+            size_ratio=size_ratio,
         )
 
         # Accumulate statistics

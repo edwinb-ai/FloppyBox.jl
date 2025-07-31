@@ -197,7 +197,7 @@ function check_overlaps_with_images(
         _, d_c = minimum_image_distance(pa, pb, box)   # no list => MIC in fractional space
 
         d = min(d_c, min(d_ab, d_ba))
-        thresh = (pa.sigma + pb.sigma) / 2
+        thresh = (pa.sigma + pb.sigma) / 2.0
         if d < thresh - 1e-12
             return true, ("pair", a, b, d, thresh)
         end
