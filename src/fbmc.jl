@@ -366,6 +366,10 @@ function parse_commandline()
         help = "The acceptance rate of deformation (shearing) moves. It is important to note that due to how the simulation prints the values taking into account the global accumulants, the resulting acceptance rate might be higher."
         arg_type = Float64
         default = 0.15
+        "--pathname"
+        help = "This is the path to save the configuration files. If it does not exist it will be created."
+        arg_type = String
+        default = ""
     end
 
     return ArgParse.parse_args(s)
@@ -390,6 +394,13 @@ function main()
     equilibration_cycles = parsed_args["init-equilibration-cycles"]
     ramp_cycles = parsed_args["equilibration-cycles"]
     final_cycles = parsed_args["final-equilibration-cycles"]
+
+    # Deal with the directory path
+    pathname = parsed_args["pathname"]
+    # If the path does not exist, create it
+    working_dir = if !isdir(pathname)
+        mkpath(pathname)
+    end
 
     # Move frequency chooses randomly which move will be sampled
     volume_move_freq = 0.15
@@ -454,8 +465,9 @@ function main()
     )
 
     # Write initial configuration
-    fbmc.write_xyz(particles, box, "initial.xyz", images)
-    println("\nInitial configuration written to initial.xyz")
+    initial_configuration_path = joinpath(working_dir, "initial.xyz")
+    fbmc.write_xyz(particles, box, initial_configuration_path, images)
+    println("\nInitial configuration written to $(initial_configuration_path)")
 
     # Monte Carlo simulation tracking
     total_accepted_translations = 0
@@ -516,10 +528,6 @@ function main()
             current_packing = fbmc.calculate_current_packing_fraction(
                 particles, box, sigma_A, size_ratio
             )
-
-            # Compute box heights
-            heights = fbmc.compute_box_heights(box)
-            max_particle_diameter = maximum(p.sigma for p in particles)
 
             trans_acc = if total_translation_attempts > 0
                 total_accepted_translations / total_translation_attempts
@@ -598,10 +606,6 @@ function main()
                 particles, box, sigma_A, size_ratio
             )
 
-            # Compute box heights
-            heights = fbmc.compute_box_heights(box)
-            max_particle_diameter = maximum(p.sigma for p in particles)
-
             trans_acc = if total_translation_attempts > 0
                 total_accepted_translations / total_translation_attempts
             else
@@ -675,10 +679,6 @@ function main()
                 particles, box, sigma_A, size_ratio
             )
 
-            # Compute box heights
-            heights = fbmc.compute_box_heights(box)
-            max_particle_diameter = maximum(p.sigma for p in particles)
-
             trans_acc = if total_translation_attempts > 0
                 total_accepted_translations / total_translation_attempts
             else
@@ -694,6 +694,12 @@ function main()
             else
                 0.0
             end
+
+            println(
+                "Equil. Cycle $cycle: P = $(round(current_pressure, digits=3)), V = $(round(current_volume, digits=3)), η = $(round(current_packing, digits=8)), " *
+                "T_acc = $(round(trans_acc, digits=3)), V_acc = $(round(vol_acc, digits=3)), " *
+                "D_acc = $(round(deform_acc, digits=3)), ",
+            )
         end
     end
 
@@ -786,17 +792,29 @@ function main()
         particles, box, sigma_A, size_ratio
     )
 
+    # Print most important information, and save it to disk
+    final_pressure = round(current_pressure, digits=6)
+    final_volume = round(final_volume, digits=6)
+    final_packing_fraction = round(final_packing, digits=8)
     println("\nFinal State:")
-    println("Final pressure: $(round(current_pressure, digits=3))")
-    println("Final volume: $(round(final_volume, digits=3))")
-    println("Final packing fraction: $(round(final_packing, digits=8))")
+    println("Final pressure: $(final_pressure)")
+    println("Final volume: $(final_volume)")
+    println("Final packing fraction: $(final_packing_fraction)")
+
+    data_file = joinpath(working_dir, "packing_results.txt")
+    open(data_file, "w") do io
+        println(io, "Final pressure: $(final_pressure)")
+        println(io, "Final volume: $(final_volume)")
+        println(io, "Final packing fraction: $(final_packing_fraction)")
+    end
 
     # Write final configuration
     images = fbmc.compute_image_lists(box, particles)
     fbmc.check_configuration_validity(particles, box, images)
-    fbmc.write_xyz(particles, box, "final.xyz", images)
+    final_configuration_path = joinpath(working_dir, "final.xyz")
+    fbmc.write_xyz(particles, box, final_configuration_path, images)
 
-    println("\nFinal configuration written to final.xyz")
+    println("\nFinal configuration written to $(final_configuration_path)")
 
     return nothing
 end
