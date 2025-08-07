@@ -370,6 +370,22 @@ function parse_commandline()
         help = "This is the path to save the configuration files. If it does not exist it will be created."
         arg_type = String
         default = ""
+        "--min-displacement"
+        help = "Minimum bound for translational move displacement parameter to prevent parameter collapse."
+        arg_type = Float64
+        default = 1e-3
+        "--min-volume-change"
+        help = "Minimum bound for volume move ln(V) change parameter to prevent parameter collapse."
+        arg_type = Float64
+        default = 1e-3
+        "--min-deformation"
+        help = "Minimum bound for deformation move parameter to prevent parameter collapse. Critical for binary mixtures."
+        arg_type = Float64
+        default = 0.01
+        "--adaptation-interval"
+        help = "Number of Monte Carlo cycles between parameter adaptations. Lower values adapt more frequently."
+        arg_type = Int
+        default = 500
     end
 
     return ArgParse.parse_args(s)
@@ -384,7 +400,7 @@ function main()
     frac_B = parsed_args["composition"]
     sigma_A = parsed_args["sigma-A"]
     sigma_B = size_ratio * sigma_A
-    packing_fraction = parsed_args["sigma-A"]
+    packing_fraction = parsed_args["initial-packing-fraction"]
 
     # Pressure ramp parameters
     initial_pressure = parsed_args["initial-pressure"]
@@ -397,14 +413,19 @@ function main()
 
     # Deal with the directory path
     pathname = parsed_args["pathname"]
-    # If the path does not exist, create it
-    working_dir = if !isdir(pathname)
+    # If the path does not exist, create it; if empty, use current directory
+    working_dir = if isempty(pathname)
+        pwd()
+    elseif !isdir(pathname)
         mkpath(pathname)
+        pathname
+    else
+        pathname
     end
 
     # Move frequency chooses randomly which move will be sampled
-    volume_move_freq = 0.15
-    deform_move_freq = 0.15
+    volume_move_freq = 0.25
+    deform_move_freq = 0.25
 
     # Lattice reduction parameters
     auto_reduce = true
@@ -414,17 +435,17 @@ function main()
     initial_max_displacement = 1.0
     initial_max_ln_vol_change = 1.0
     initial_max_deformation = 1.0
-    adaptation_interval = 100  # Adapt every 50 cycles for stability
+    adaptation_interval = parsed_args["adaptation-interval"]  # Now configurable via CLI
     printing_interval = 10000   # Print progress every 1000 cycles
     target_translation = parsed_args["move-acceptance"]
     target_volume = parsed_args["volume-acceptance"]
     target_deformation = parsed_args["deform-acceptance"]
 
-    # Minimum bounds to prevent freeze
-    min_displacement = 1e-4
-    min_ln_vol_change = 1e-4
-    min_deformation = 1e-4
-    adaptation_factor = 1.05
+    # Minimum bounds to prevent freeze (now configurable via CLI)
+    min_displacement = parsed_args["min-displacement"]
+    min_ln_vol_change = parsed_args["min-volume-change"]
+    min_deformation = parsed_args["min-deformation"]
+    adaptation_factor = 1.02  # Less aggressive than original 1.05
 
     params = fbmc.EnhancedAdaptiveParameters(
         initial_max_displacement,
@@ -545,10 +566,12 @@ function main()
                 0.0
             end
 
+            # Add parameter tracking for diagnostics
+            distortion = fbmc.compute_distortion_metric(box)
             println(
                 "Equil. Cycle $cycle: P = $(round(current_pressure, digits=3)), V = $(round(current_volume, digits=3)), η = $(round(current_packing, digits=8)), " *
                 "T_acc = $(round(trans_acc, digits=3)), V_acc = $(round(vol_acc, digits=3)), " *
-                "D_acc = $(round(deform_acc, digits=3)), ",
+                "D_acc = $(round(deform_acc, digits=3)), max_def = $(round(params.max_deformation, digits=4)), distort = $(round(distortion, digits=2))"
             )
         end
     end
@@ -622,10 +645,12 @@ function main()
                 0.0
             end
 
+            # Add parameter tracking for diagnostics
+            distortion = fbmc.compute_distortion_metric(box)
             println(
                 "Equil. Cycle $cycle: P = $(round(current_pressure, digits=3)), V = $(round(current_volume, digits=3)), η = $(round(current_packing, digits=8)), " *
                 "T_acc = $(round(trans_acc, digits=3)), V_acc = $(round(vol_acc, digits=3)), " *
-                "D_acc = $(round(deform_acc, digits=3)), ",
+                "D_acc = $(round(deform_acc, digits=3)), max_def = $(round(params.max_deformation, digits=4)), distort = $(round(distortion, digits=2))"
             )
         end
     end
@@ -695,10 +720,12 @@ function main()
                 0.0
             end
 
+            # Add parameter tracking for diagnostics
+            distortion = fbmc.compute_distortion_metric(box)
             println(
                 "Equil. Cycle $cycle: P = $(round(current_pressure, digits=3)), V = $(round(current_volume, digits=3)), η = $(round(current_packing, digits=8)), " *
                 "T_acc = $(round(trans_acc, digits=3)), V_acc = $(round(vol_acc, digits=3)), " *
-                "D_acc = $(round(deform_acc, digits=3)), ",
+                "D_acc = $(round(deform_acc, digits=3)), max_def = $(round(params.max_deformation, digits=4)), distort = $(round(distortion, digits=2))"
             )
         end
     end

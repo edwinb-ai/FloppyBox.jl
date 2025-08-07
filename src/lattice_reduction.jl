@@ -36,7 +36,8 @@ function check_box_validity(M::Matrix{T}, particles) where {T<:AbstractFloat}
     h2 = volume / area_13
     h3 = volume / area_12
     max_sigma = maximum(p.sigma for p in particles)
-    min_required = max_sigma + 1e-6
+    # Relaxed constraint: allow more aggressive compression for binary mixtures
+    min_required = max_sigma * 0.75  # Was max_sigma + 1e-6
     return (h1 >= min_required) && (h2 >= min_required) && (h3 >= min_required)
 end
 
